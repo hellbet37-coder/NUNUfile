@@ -1,0 +1,1262 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LINORED - Personal Files</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- jsPDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <!-- PDF.js for PDF Thumbnails & Merging -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            bg: '#F4F1EA',
+                            accent: '#184E57',
+                            accentHover: '#123B42',
+                            box: '#EFECE6',
+                            textDark: '#1C1917',
+                            textMuted: '#78716C'
+                        }
+                    },
+                    fontFamily: {
+                        serif: ['"Instrument Serif"', 'Georgia', 'serif'],
+                        sans: ['Inter', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        * { -webkit-tap-highlight-color: transparent; }
+        
+        body {
+            background-color: #F4F1EA;
+            color: #1C1917;
+            font-family: 'Inter', sans-serif;
+            overflow-x: hidden;
+            transition: background-color 0.3s cubic-bezier(0.16, 1, 0.3, 1), color 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .dark body {
+            background-color: #0F0F0F;
+            color: #F3F4F6;
+        }
+
+        .font-serif-title { font-family: 'Instrument Serif', Georgia, serif; }
+
+        .gpu-accelerated {
+            will-change: transform, opacity;
+            backface-visibility: hidden;
+            transform: translateZ(0);
+        }
+
+        .btn-interactive {
+            transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s ease, border-color 0.2s ease, opacity 0.18s ease;
+            user-select: none;
+        }
+        .btn-interactive:active {
+            transform: scale(0.97);
+            opacity: 0.88;
+        }
+
+        @keyframes smoothFadeUp {
+            0% { opacity: 0; transform: translate3d(0, 10px, 0); }
+            100% { opacity: 1; transform: translate3d(0, 0, 0); }
+        }
+
+        .anim-folder-item {
+            opacity: 0;
+            animation: smoothFadeUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            animation-delay: calc(var(--stagger, 0) * 0.025s);
+        }
+
+        .view-section {
+            transition: opacity 0.25s cubic-bezier(0.16, 1, 0.3, 1), transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .view-hidden {
+            opacity: 0;
+            transform: translate3d(0, 6px, 0);
+            pointer-events: none;
+            position: absolute;
+            width: 100%;
+        }
+
+        .doc-box {
+            transition: border-color 0.2s ease, background-color 0.2s ease, transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .doc-box.drag-over {
+            border-color: #184E57 !important;
+            background-color: rgba(24, 78, 87, 0.1) !important;
+            transform: scale(1.01);
+        }
+
+        .modal-overlay { transition: opacity 0.25s ease; }
+        .modal-container { transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease; }
+
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between p-4 md:p-8 max-w-2xl mx-auto dark:bg-stone-950 dark:text-stone-100">
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 bg-stone-900/90 dark:bg-stone-100/90 backdrop-blur-md text-white dark:text-stone-900 text-xs font-medium px-4 py-2.5 rounded-full shadow-xl opacity-0 pointer-events-none transition-all duration-300 ease-out z-50 flex items-center space-x-2 border border-stone-700/30 dark:border-stone-300/30">
+        <i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-400 dark:text-emerald-600"></i>
+        <span id="toastMsg">Copied!</span>
+    </div>
+
+    <!-- App Wrapper -->
+    <div id="app" class="w-full space-y-5 relative">
+
+        <!-- Top Header -->
+        <header class="flex items-center justify-between pb-2 border-b border-stone-200/60 dark:border-stone-800/60 transition-colors">
+            <div>
+                <span class="text-[10px] tracking-widest text-brand-textMuted font-bold uppercase dark:text-stone-400">LINORED</span>
+                <h1 class="text-3xl md:text-4xl font-serif-title text-brand-textDark dark:text-white mt-0.5 tracking-tight">Personal files</h1>
+            </div>
+            <div class="flex items-center space-x-2">
+                <button onclick="toggleDarkMode()" title="Toggle Dark Mode" class="btn-interactive gpu-accelerated p-2.5 bg-brand-box hover:bg-stone-200 dark:bg-stone-800 dark:hover:bg-stone-700 rounded-xl text-brand-textDark dark:text-stone-200">
+                    <i id="darkModeIcon" data-lucide="moon" class="w-4 h-4"></i>
+                </button>
+                <button onclick="exportAllData()" title="Backup Data" class="btn-interactive gpu-accelerated p-2.5 bg-brand-box hover:bg-stone-200 dark:bg-stone-800 dark:hover:bg-stone-700 rounded-xl text-brand-textDark dark:text-stone-200">
+                    <i data-lucide="upload-cloud" class="w-4 h-4"></i>
+                </button>
+                <button onclick="importDataTrigger()" title="Restore Data" class="btn-interactive gpu-accelerated p-2.5 bg-brand-box hover:bg-stone-200 dark:bg-stone-800 dark:hover:bg-stone-700 rounded-xl text-brand-textDark dark:text-stone-200">
+                    <i data-lucide="download-cloud" class="w-4 h-4"></i>
+                </button>
+                <input type="file" id="importFileInput" class="hidden" accept=".json" onchange="importData(event)">
+                <button onclick="openNewFolderModal()" class="btn-interactive gpu-accelerated flex items-center space-x-2 bg-brand-accent text-white px-4 py-2.5 rounded-xl font-medium text-sm hover:bg-brand-accentHover shadow-sm">
+                    <i data-lucide="folder-plus" class="w-4 h-4"></i>
+                    <span>New folder</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- Home View -->
+        <div id="view-home" class="view-section space-y-4 gpu-accelerated">
+            
+            <!-- Statistics Metric Bar -->
+            <div class="grid grid-cols-4 gap-2 text-center">
+                <div class="bg-white/80 dark:bg-stone-900/80 p-2.5 rounded-2xl border border-stone-200/60 dark:border-stone-800/60 shadow-sm">
+                    <div class="text-[9px] font-bold text-stone-400 uppercase tracking-wider">Total</div>
+                    <div id="statTotal" class="text-xl font-bold text-stone-800 dark:text-stone-100 font-serif-title mt-0.5">0</div>
+                </div>
+                <div class="bg-amber-500/10 dark:bg-amber-500/5 p-2.5 rounded-2xl border border-amber-500/20 shadow-sm">
+                    <div class="text-[9px] font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wider">Pending</div>
+                    <div id="statPending" class="text-xl font-bold text-amber-800 dark:text-amber-300 font-serif-title mt-0.5">0</div>
+                </div>
+                <div class="bg-sky-500/10 dark:bg-sky-500/5 p-2.5 rounded-2xl border border-sky-500/20 shadow-sm">
+                    <div class="text-[9px] font-bold text-sky-700 dark:text-sky-400 uppercase tracking-wider">Ticketed</div>
+                    <div id="statTicketed" class="text-xl font-bold text-sky-800 dark:text-sky-300 font-serif-title mt-0.5">0</div>
+                </div>
+                <div class="bg-emerald-500/10 dark:bg-emerald-500/5 p-2.5 rounded-2xl border border-emerald-500/20 shadow-sm">
+                    <div class="text-[9px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider">Done</div>
+                    <div id="statCompleted" class="text-xl font-bold text-emerald-800 dark:text-emerald-300 font-serif-title mt-0.5">0</div>
+                </div>
+            </div>
+
+            <!-- Search Input -->
+            <div class="relative group">
+                <i data-lucide="search" class="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-stone-400 transition-colors group-focus-within:text-brand-accent"></i>
+                <input type="text" id="searchInput" oninput="debouncedRenderFolders()" placeholder="Search name, passport, phone, or ID"
+                    class="w-full bg-white dark:bg-stone-800/80 dark:text-white pl-11 pr-4 py-3 rounded-2xl text-sm outline-none border border-stone-200/80 dark:border-stone-700/80 focus:border-brand-accent dark:focus:border-brand-accent transition duration-200 shadow-sm">
+            </div>
+
+            <!-- Slot Manager & Filters Toolbar -->
+            <div class="space-y-2.5 bg-white/50 dark:bg-stone-900/50 p-3 rounded-2xl border border-stone-200/50 dark:border-stone-800/50">
+                <!-- Slot Order Manager -->
+                <div class="flex items-center space-x-2 overflow-x-auto pb-0.5 text-xs no-scrollbar">
+                    <span class="text-[10px] font-bold text-stone-400 uppercase tracking-wider pr-1 flex items-center gap-1">
+                        <i data-lucide="arrow-up-down" class="w-3 h-3"></i> Order:
+                    </span>
+                    <select id="sortOrderSelect" onchange="setSortOrder(this.value)" class="bg-white dark:bg-stone-800 text-stone-700 dark:text-stone-200 border border-stone-200/80 dark:border-stone-700 rounded-xl px-3 py-1.5 font-medium outline-none text-xs focus:border-brand-accent cursor-pointer shadow-sm transition">
+                        <option value="newest">Newest to Oldest</option>
+                        <option value="oldest">Oldest to Newest</option>
+                        <option value="alpha-asc">Alphabetical (A – Z)</option>
+                        <option value="alpha-desc">Alphabetical (Z – A)</option>
+                    </select>
+                </div>
+
+                <!-- Status Filter -->
+                <div class="flex items-center space-x-2 overflow-x-auto pb-0.5 text-xs no-scrollbar">
+                    <span class="text-[10px] font-bold text-stone-400 uppercase tracking-wider pr-1">Status:</span>
+                    <button onclick="setStatusFilter('All')" id="filterStatus-All" class="btn-interactive px-3.5 py-1 rounded-full font-medium transition bg-brand-accent text-white">All</button>
+                    <button onclick="setStatusFilter('Pending')" id="filterStatus-Pending" class="btn-interactive px-3.5 py-1 rounded-full font-medium transition bg-white dark:bg-stone-800 text-stone-600 dark:text-stone-300 border border-stone-200/60 dark:border-stone-700/60">Pending</button>
+                    <button onclick="setStatusFilter('Ticket Issued')" id="filterStatus-Ticket Issued" class="btn-interactive px-3.5 py-1 rounded-full font-medium transition bg-white dark:bg-stone-800 text-stone-600 dark:text-stone-300 border border-stone-200/60 dark:border-stone-700/60">Ticket Issued</button>
+                    <button onclick="setStatusFilter('Completed')" id="filterStatus-Completed" class="btn-interactive px-3.5 py-1 rounded-full font-medium transition bg-white dark:bg-stone-800 text-stone-600 dark:text-stone-300 border border-stone-200/60 dark:border-stone-700/60">Completed</button>
+                </div>
+
+                <!-- Docs Completion Filter -->
+                <div class="flex items-center space-x-2 overflow-x-auto pb-0.5 text-xs no-scrollbar">
+                    <span class="text-[10px] font-bold text-stone-400 uppercase tracking-wider pr-1">Docs:</span>
+                    <button onclick="setCompletionFilter('All')" id="filterComp-All" class="btn-interactive px-3.5 py-1 rounded-full font-medium transition bg-brand-accent text-white">All Docs</button>
+                    <button onclick="setCompletionFilter('Complete')" id="filterComp-Complete" class="btn-interactive px-3.5 py-1 rounded-full font-medium transition bg-white dark:bg-stone-800 text-stone-600 dark:text-stone-300 border border-stone-200/60 dark:border-stone-700/60">6/6 Complete</button>
+                    <button onclick="setCompletionFilter('Incomplete')" id="filterComp-Incomplete" class="btn-interactive px-3.5 py-1 rounded-full font-medium transition bg-white dark:bg-stone-800 text-stone-600 dark:text-stone-300 border border-stone-200/60 dark:border-stone-700/60">Incomplete</button>
+                </div>
+            </div>
+
+            <!-- Empty State -->
+            <div id="emptyCard" class="bg-white dark:bg-stone-800/90 rounded-3xl p-6 md:p-8 space-y-4 shadow-sm border border-stone-200/60 dark:border-stone-700/60 transition duration-300">
+                <span class="text-[10px] font-bold tracking-wider uppercase text-stone-400">STORAGE READY</span>
+                <h2 class="text-2xl md:text-3xl font-serif-title text-brand-textDark dark:text-white">Create the first folder</h2>
+                <p class="text-xs text-brand-textMuted dark:text-stone-400 leading-relaxed">
+                    Add a person, then attach IDs, Passport, Visa, Contract, Insurance, and COC.
+                </p>
+                <button onclick="openNewFolderModal()" class="btn-interactive gpu-accelerated flex items-center space-x-2 bg-brand-accent text-white px-4 py-2.5 rounded-xl font-medium text-sm hover:bg-brand-accentHover">
+                    <i data-lucide="folder-plus" class="w-4 h-4"></i>
+                    <span>New folder</span>
+                </button>
+            </div>
+
+            <!-- Folders Grid -->
+            <div id="folderList" class="grid grid-cols-1 gap-3 hidden"></div>
+        </div>
+
+        <!-- Folder Detail View -->
+        <div id="view-detail" class="view-section view-hidden space-y-6 gpu-accelerated">
+            <div class="flex items-center justify-between text-xs text-brand-textMuted dark:text-stone-400">
+                <button onclick="showHomeView()" class="btn-interactive gpu-accelerated flex items-center space-x-1 font-medium hover:text-stone-900 dark:hover:text-white py-1 px-2 -ml-2 rounded-lg">
+                    <i data-lucide="chevron-left" class="w-4 h-4"></i>
+                    <span>Folders</span>
+                </button>
+
+                <div class="flex items-center space-x-2">
+                    <span id="folderPagination" class="bg-brand-box dark:bg-stone-800 px-2.5 py-1 rounded-lg text-[11px] font-medium text-stone-600 dark:text-stone-300 border border-stone-200/50 dark:border-stone-700/50">1/1</span>
+                    <button onclick="editFolderDetails()" class="btn-interactive gpu-accelerated flex items-center space-x-1 bg-brand-box dark:bg-stone-800 hover:bg-stone-200 dark:hover:bg-stone-700 px-3 py-1.5 rounded-lg font-medium text-stone-700 dark:text-stone-200 border border-stone-200/50 dark:border-stone-700/50">
+                        <i data-lucide="edit-3" class="w-3.5 h-3.5"></i>
+                        <span>Edit</span>
+                    </button>
+                    <button onclick="downloadAllPDFs()" class="btn-interactive gpu-accelerated flex items-center space-x-1 bg-brand-box dark:bg-stone-800 hover:bg-stone-200 dark:hover:bg-stone-700 px-3 py-1.5 rounded-lg font-medium text-stone-700 dark:text-stone-200 border border-stone-200/50 dark:border-stone-700/50">
+                        <i data-lucide="file-archive" class="w-3.5 h-3.5"></i>
+                        <span>All PDFs</span>
+                    </button>
+                    <button onclick="deleteCurrentFolder()" class="btn-interactive gpu-accelerated text-stone-400 hover:text-red-500 p-1.5 rounded-lg transition-colors">
+                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Detail Header Info -->
+            <div class="space-y-3 bg-white dark:bg-stone-800/70 p-5 rounded-3xl border border-stone-200/60 dark:border-stone-700/60 shadow-sm">
+                <div class="flex flex-wrap items-center gap-2">
+                    <h2 id="detailName" class="text-3xl font-serif-title uppercase text-brand-textDark dark:text-white">--</h2>
+                    <span id="detailBadge" class="text-[11px] font-semibold px-2.5 py-0.5 rounded-full border">--</span>
+                    <span id="detailStatusBadge" class="text-[11px] font-bold px-2.5 py-0.5 rounded-full border hidden">--</span>
+                </div>
+                
+                <div class="grid grid-cols-3 gap-2 text-[10px] text-stone-400 uppercase tracking-wider pt-3 border-t border-stone-100 dark:border-stone-700/60">
+                    <div>
+                        <div class="text-[9px] font-bold">PASSPORT</div>
+                        <button type="button" onclick="copyText(event, document.getElementById('detailPassportText').innerText, 'Passport')" class="btn-interactive flex items-center space-x-1 text-xs font-medium text-stone-700 dark:text-stone-200 normal-case mt-0.5 hover:text-brand-accent dark:hover:text-stone-100 transition">
+                            <span id="detailPassportText">--</span>
+                            <i data-lucide="copy" class="w-3 h-3 text-stone-400"></i>
+                        </button>
+                    </div>
+                    <div>
+                        <div class="text-[9px] font-bold">LABOR ID</div>
+                        <button type="button" onclick="copyText(event, document.getElementById('detailLaborText').innerText, 'Labor ID')" class="btn-interactive flex items-center space-x-1 text-xs font-medium text-stone-700 dark:text-stone-200 normal-case mt-0.5 hover:text-brand-accent dark:hover:text-stone-100 transition">
+                            <span id="detailLaborText">--</span>
+                            <i data-lucide="copy" class="w-3 h-3 text-stone-400"></i>
+                        </button>
+                    </div>
+                    <div>
+                        <div class="text-[9px] font-bold">PHONE</div>
+                        <button type="button" onclick="copyText(event, document.getElementById('detailPhoneText').innerText, 'Phone')" class="btn-interactive flex items-center space-x-1 text-xs font-medium text-stone-700 dark:text-stone-200 normal-case mt-0.5 hover:text-brand-accent dark:hover:text-stone-100 transition">
+                            <span id="detailPhoneText">--</span>
+                            <i data-lucide="copy" class="w-3 h-3 text-stone-400"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="documentsContainer" class="space-y-4">
+                <div id="docSlotsList" class="space-y-4"></div>
+            </div>
+        </div>
+
+    </div>
+
+    <footer class="mt-12 text-center text-xs text-stone-400 py-4 border-t border-stone-200/40 dark:border-stone-800/40">
+        Unlimited device storage (IndexedDB). Drag files directly into WhatsApp Web, LMIS, or Desktop natively.
+    </footer>
+
+    <input type="file" id="genericFileInput" class="hidden" accept="image/*,application/pdf,.pdf,image/heic,image/webp" onchange="handleFileUpload(event)">
+
+    <!-- Folder Modal -->
+    <div id="modalNewFolder" class="fixed inset-0 bg-stone-900/40 backdrop-blur-md flex items-center justify-center p-4 hidden z-50 modal-overlay opacity-0">
+        <div id="modalCard" class="bg-white dark:bg-stone-800 w-full max-w-md rounded-3xl p-6 space-y-4 shadow-2xl relative gpu-accelerated modal-container scale-95 opacity-0 border border-stone-200/50 dark:border-stone-700/50">
+            <button onclick="closeNewFolderModal()" class="btn-interactive absolute top-6 right-6 text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 p-1 rounded-lg">
+                <i data-lucide="x" class="w-4 h-4"></i>
+            </button>
+
+            <div>
+                <h3 id="modalTitle" class="text-2xl font-serif-title text-brand-textDark dark:text-white">New folder</h3>
+                <p class="text-xs text-stone-400 mt-0.5">Enter person details and status.</p>
+            </div>
+
+            <form id="folderForm" onsubmit="saveFolder(event)" class="space-y-3 text-xs">
+                <div>
+                    <label class="block text-stone-600 dark:text-stone-300 font-medium mb-1">Full name</label>
+                    <input type="text" id="inputName" required oninput="updateFolderPreview()" placeholder="e.g. Ahmed Hassan" class="w-full bg-white dark:bg-stone-700 border border-stone-200 dark:border-stone-600 rounded-xl p-3 text-stone-800 dark:text-white outline-none focus:border-brand-accent transition">
+                </div>
+
+                <div>
+                    <label class="block text-stone-600 dark:text-stone-300 font-medium mb-1">Process Status</label>
+                    <select id="inputStatus" class="w-full bg-white dark:bg-stone-700 border border-stone-200 dark:border-stone-600 rounded-xl p-3 text-stone-800 dark:text-white outline-none font-medium focus:border-brand-accent transition">
+                        <option value="" selected>-- Select Status --</option>
+                        <option value="Pending">Pending</option>
+                        <option value="Ticket Issued">Ticket Issued</option>
+                        <option value="Completed">Completed</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-stone-600 dark:text-stone-300 font-medium mb-1">Passport number</label>
+                    <input type="text" id="inputPassport" placeholder="e.g. A12345678" class="w-full bg-white dark:bg-stone-700 border border-stone-200 dark:border-stone-600 rounded-xl p-3 text-stone-800 dark:text-white outline-none focus:border-brand-accent transition">
+                </div>
+
+                <div>
+                    <label class="block text-stone-600 dark:text-stone-300 font-medium mb-1">Labor ID</label>
+                    <input type="text" id="inputLabor" placeholder="e.g. 201234567" class="w-full bg-white dark:bg-stone-700 border border-stone-200 dark:border-stone-600 rounded-xl p-3 text-stone-800 dark:text-white outline-none focus:border-brand-accent transition">
+                </div>
+
+                <div>
+                    <label class="block text-stone-600 dark:text-stone-300 font-medium mb-1">Phone number <span class="text-stone-400 font-normal">(Optional)</span></label>
+                    <input type="text" id="inputPhone" placeholder="e.g. +251 91 234 5678" class="w-full bg-white dark:bg-stone-700 border border-stone-200 dark:border-stone-600 rounded-xl p-3 text-stone-800 dark:text-white outline-none focus:border-brand-accent transition">
+                </div>
+
+                <div class="bg-brand-box dark:bg-stone-900 rounded-2xl p-4 space-y-0.5 border border-stone-200/40 dark:border-stone-800/40">
+                    <span class="text-[9px] font-bold text-stone-400 tracking-wider uppercase">FOLDER PREVIEW</span>
+                    <div id="previewFolderName" class="font-serif-title text-lg text-stone-700 dark:text-stone-200 truncate">Untitled</div>
+                </div>
+
+                <div class="pt-2 space-y-2">
+                    <button type="submit" class="btn-interactive w-full bg-brand-accent text-white py-3 rounded-xl font-medium text-xs shadow-sm">Save folder</button>
+                    <button type="button" onclick="closeNewFolderModal()" class="btn-interactive w-full bg-brand-box dark:bg-stone-700 text-stone-600 dark:text-stone-300 py-3 rounded-xl font-medium text-xs">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // --- IndexedDB Storage Engine ---
+        const DB_NAME = 'LinoredStorageDB';
+        const DB_VERSION = 1;
+        const STORE_NAME = 'foldersStore';
+
+        function openDB() {
+            return new Promise((resolve, reject) => {
+                const req = indexedDB.open(DB_NAME, DB_VERSION);
+                req.onupgradeneeded = (e) => {
+                    const db = e.target.result;
+                    if (!db.objectStoreNames.contains(STORE_NAME)) {
+                        db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+                    }
+                };
+                req.onsuccess = (e) => resolve(e.target.result);
+                req.onerror = (e) => reject(e.target.error);
+            });
+        }
+
+        async function dbGetAll() {
+            const db = await openDB();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(STORE_NAME, 'readonly');
+                const store = tx.objectStore(STORE_NAME);
+                const req = store.getAll();
+                req.onsuccess = () => resolve(req.result || []);
+                req.onerror = () => reject(req.error);
+            });
+        }
+
+        async function dbSave(folder) {
+            const db = await openDB();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(STORE_NAME, 'readwrite');
+                const store = tx.objectStore(STORE_NAME);
+                const req = store.put(folder);
+                req.onsuccess = () => resolve();
+                req.onerror = () => reject(req.error);
+            });
+        }
+
+        async function dbDelete(id) {
+            const db = await openDB();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(STORE_NAME, 'readwrite');
+                const store = tx.objectStore(STORE_NAME);
+                const req = store.delete(id);
+                req.onsuccess = () => resolve();
+                req.onerror = () => reject(req.error);
+            });
+        }
+
+        async function dbClearAndImport(foldersArray) {
+            const db = await openDB();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(STORE_NAME, 'readwrite');
+                const store = tx.objectStore(STORE_NAME);
+                store.clear().onsuccess = () => {
+                    foldersArray.forEach(f => store.put(f));
+                    resolve();
+                };
+            });
+        }
+
+        // --- Helper Utilities ---
+        function dataUrlToBlob(dataUrl) {
+            const arr = dataUrl.split(',');
+            const mimeMatch = arr[0].match(/:(.*?);/);
+            const mime = mimeMatch ? mimeMatch[1] : 'application/pdf';
+            const bstr = atob(arr[1]);
+            let n = bstr.length;
+            const u8arr = new Uint8Array(n);
+            while (n--) {
+                u8arr[n] = bstr.charCodeAt(n);
+            }
+            return new Blob([u8arr], { type: mime });
+        }
+
+        let searchDebounceTimer = null;
+        function debouncedRenderFolders() {
+            clearTimeout(searchDebounceTimer);
+            searchDebounceTimer = setTimeout(renderFolders, 120);
+        }
+
+        // --- State ---
+        let folders = [];
+        let currentFolderId = null;
+        let activeUploadDocKey = null;
+        let activeStatusFilter = 'All';
+        let activeCompletionFilter = 'All';
+        let activeSortOrder = 'newest';
+        let isDarkMode = localStorage.getItem('linored_dark_mode') === 'true';
+
+        const DOC_FIELDS = [
+            { key: 'mainId', title: 'Main ID' },
+            { key: 'emergency', title: 'Emergency ID', isTwoSided: true },
+            { key: 'passport', title: 'Passport' },
+            { key: 'visa', title: 'Visa' },
+            { key: 'contract', title: 'Contract' },
+            { key: 'insurance', title: 'Insurance' },
+            { key: 'coc', title: 'COC Certificate' }
+        ];
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            initDarkMode();
+            folders = await dbGetAll();
+            renderFolders();
+            lucide.createIcons();
+        });
+
+        function initDarkMode() {
+            if (isDarkMode) {
+                document.documentElement.classList.add('dark');
+                document.getElementById('darkModeIcon').setAttribute('data-lucide', 'sun');
+            } else {
+                document.documentElement.classList.remove('dark');
+                document.getElementById('darkModeIcon').setAttribute('data-lucide', 'moon');
+            }
+            lucide.createIcons();
+        }
+
+        function toggleDarkMode() {
+            isDarkMode = !isDarkMode;
+            localStorage.setItem('linored_dark_mode', isDarkMode);
+            initDarkMode();
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function getFolderCompletion(folder) {
+            const docs = folder.docs || {};
+            const checks = [
+                !!docs.mainId,
+                !!(docs.emergencyFront && docs.emergencyBack),
+                !!docs.passport,
+                !!docs.visa,
+                !!docs.contract,
+                !!docs.insurance
+            ];
+            const completed = checks.filter(Boolean).length;
+            return { completed, total: 6, isFull: completed === 6 };
+        }
+
+        function getStatusBadgeStyle(status) {
+            switch (status) {
+                case 'Ticket Issued':
+                    return 'bg-sky-100/80 dark:bg-sky-950/60 text-sky-800 dark:text-sky-300 border-sky-300/60 dark:border-sky-800/60';
+                case 'Completed':
+                    return 'bg-emerald-100/80 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border-emerald-300/60 dark:border-emerald-800/60';
+                case 'Pending':
+                    return 'bg-amber-100/80 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border-amber-300/60 dark:border-amber-800/60';
+                default:
+                    return 'hidden';
+            }
+        }
+
+        function updateStatistics() {
+            const total = folders.length;
+            const pending = folders.filter(f => f.status === 'Pending').length;
+            const ticketed = folders.filter(f => f.status === 'Ticket Issued').length;
+            const completed = folders.filter(f => f.status === 'Completed').length;
+
+            document.getElementById('statTotal').innerText = total;
+            document.getElementById('statPending').innerText = pending;
+            document.getElementById('statTicketed').innerText = ticketed;
+            document.getElementById('statCompleted').innerText = completed;
+        }
+
+        function setSortOrder(order) {
+            activeSortOrder = order;
+            renderFolders();
+        }
+
+        function setStatusFilter(status) {
+            activeStatusFilter = status;
+            ['All', 'Pending', 'Ticket Issued', 'Completed'].forEach(st => {
+                const btn = document.getElementById(`filterStatus-${st}`);
+                if (btn) {
+                    btn.className = (st === status)
+                        ? 'btn-interactive px-3.5 py-1 rounded-full font-medium transition bg-brand-accent text-white shadow-sm'
+                        : 'btn-interactive px-3.5 py-1 rounded-full font-medium transition bg-white dark:bg-stone-800 text-stone-600 dark:text-stone-300 border border-stone-200/60 dark:border-stone-700/60';
+                }
+            });
+            renderFolders();
+        }
+
+        function setCompletionFilter(comp) {
+            activeCompletionFilter = comp;
+            ['All', 'Complete', 'Incomplete'].forEach(c => {
+                const btn = document.getElementById(`filterComp-${c}`);
+                if (btn) {
+                    btn.className = (c === comp)
+                        ? 'btn-interactive px-3.5 py-1 rounded-full font-medium transition bg-brand-accent text-white shadow-sm'
+                        : 'btn-interactive px-3.5 py-1 rounded-full font-medium transition bg-white dark:bg-stone-800 text-stone-600 dark:text-stone-300 border border-stone-200/60 dark:border-stone-700/60';
+                }
+            });
+            renderFolders();
+        }
+
+        function copyText(e, text, label) {
+            if (e) e.stopPropagation();
+            if (!text || text === '--') return;
+
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(text).then(() => {
+                    showToast(`Copied ${label}: ${text}`);
+                }).catch(() => {
+                    fallbackCopyText(text, label);
+                });
+            } else {
+                fallbackCopyText(text, label);
+            }
+        }
+
+        function fallbackCopyText(text, label) {
+            try {
+                const textArea = document.createElement("textarea");
+                textArea.value = text;
+                textArea.style.position = "fixed";
+                textArea.style.top = "-9999px";
+                textArea.style.left = "-9999px";
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+                const successful = document.execCommand('copy');
+                document.body.removeChild(textArea);
+                if (successful) {
+                    showToast(`Copied ${label}: ${text}`);
+                } else {
+                    prompt(`Copy ${label} manually:`, text);
+                }
+            } catch (err) {
+                prompt(`Copy ${label} manually:`, text);
+            }
+        }
+
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toastMsg').innerText = msg;
+            toast.classList.remove('opacity-0', 'pointer-events-none');
+            toast.classList.add('opacity-100');
+            setTimeout(() => {
+                toast.classList.remove('opacity-100');
+                toast.classList.add('opacity-0', 'pointer-events-none');
+            }, 2200);
+        }
+
+        function renderFolders() {
+            updateStatistics();
+            const query = (document.getElementById('searchInput').value || '').toLowerCase();
+            const listEl = document.getElementById('folderList');
+            const emptyEl = document.getElementById('emptyCard');
+
+            let filtered = folders.filter(f => {
+                const matchesQuery = (f.name && f.name.toLowerCase().includes(query)) ||
+                    (f.passport && f.passport.toLowerCase().includes(query)) ||
+                    (f.labor && f.labor.toLowerCase().includes(query)) ||
+                    (f.phone && f.phone.toLowerCase().includes(query));
+
+                const matchesStatus = activeStatusFilter === 'All' || (f.status || '') === activeStatusFilter;
+                
+                const completion = getFolderCompletion(f);
+                let matchesCompletion = true;
+                if (activeCompletionFilter === 'Complete') matchesCompletion = completion.isFull;
+                if (activeCompletionFilter === 'Incomplete') matchesCompletion = !completion.isFull;
+
+                return matchesQuery && matchesStatus && matchesCompletion;
+            });
+
+            // --- Slot Manager Sorting Logic ---
+            filtered.sort((a, b) => {
+                const timeA = Number(a.id) || 0;
+                const timeB = Number(b.id) || 0;
+                const nameA = (a.name || '').trim();
+                const nameB = (b.name || '').trim();
+
+                switch (activeSortOrder) {
+                    case 'oldest':
+                        return timeA - timeB;
+                    case 'alpha-asc':
+                        return nameA.localeCompare(nameB, undefined, { sensitivity: 'base' });
+                    case 'alpha-desc':
+                        return nameB.localeCompare(nameA, undefined, { sensitivity: 'base' });
+                    case 'newest':
+                    default:
+                        return timeB - timeA;
+                }
+            });
+
+            if (folders.length === 0) {
+                emptyEl.classList.remove('hidden');
+                listEl.classList.add('hidden');
+                return;
+            }
+
+            emptyEl.classList.add('hidden');
+            listEl.classList.remove('hidden');
+            listEl.innerHTML = '';
+
+            filtered.forEach((folder, idx) => {
+                const card = document.createElement('div');
+                card.className = 'btn-interactive gpu-accelerated bg-white dark:bg-stone-800/80 rounded-2xl p-4 border border-stone-200/60 dark:border-stone-700/60 flex items-center justify-between cursor-pointer shadow-sm hover:border-stone-300 dark:hover:border-stone-600 anim-folder-item';
+                card.style.setProperty('--stagger', idx);
+                card.onclick = () => openFolderDetail(folder.id, true);
+
+                const passportVal = folder.passport || '--';
+                const laborVal = folder.labor || '--';
+                const statusVal = folder.status || '';
+                const completion = getFolderCompletion(folder);
+
+                card.innerHTML = `
+                    <div class="space-y-2 flex-1 pr-3">
+                        <div class="flex items-center flex-wrap gap-2">
+                            <span class="font-serif-title text-xl text-stone-800 dark:text-stone-100">${escapeHtml(folder.name)}</span>
+                            <span class="bg-stone-100 dark:bg-stone-700 text-stone-600 dark:text-stone-300 text-[10px] font-bold px-2.5 py-0.5 rounded-full border border-stone-200/60 dark:border-stone-600/60">
+                                ${completion.completed}/6 complete
+                            </span>
+                            ${statusVal ? `<span class="${getStatusBadgeStyle(statusVal)} text-[10px] font-bold px-2.5 py-0.5 rounded-full border">${escapeHtml(statusVal)}</span>` : ''}
+                        </div>
+                        <div class="text-[11px] text-stone-500 flex flex-wrap items-center gap-2">
+                            <button type="button" onclick="copyText(event, '${escapeHtml(laborVal)}', 'Labor ID')" class="btn-interactive bg-stone-100/80 dark:bg-stone-700/70 hover:bg-stone-200 dark:hover:bg-stone-600 dark:text-stone-300 px-2 py-0.5 rounded-md flex items-center space-x-1 cursor-pointer font-medium transition text-stone-700">
+                                <i data-lucide="copy" class="w-3 h-3 text-stone-400"></i>
+                                <span>ID: ${escapeHtml(laborVal)}</span>
+                            </button>
+                            <button type="button" onclick="copyText(event, '${escapeHtml(passportVal)}', 'Passport')" class="btn-interactive bg-stone-100/80 dark:bg-stone-700/70 hover:bg-stone-200 dark:hover:bg-stone-600 dark:text-stone-300 px-2 py-0.5 rounded-md flex items-center space-x-1 cursor-pointer font-medium transition text-stone-700">
+                                <i data-lucide="copy" class="w-3 h-3 text-stone-400"></i>
+                                <span>Passport: ${escapeHtml(passportVal)}</span>
+                            </button>
+                        </div>
+                    </div>
+                    <i data-lucide="chevron-right" class="w-4 h-4 text-stone-400"></i>
+                `;
+                listEl.appendChild(card);
+            });
+            lucide.createIcons();
+        }
+
+        function openNewFolderModal(editMode = false) {
+            document.getElementById('modalTitle').innerText = editMode ? 'Edit folder' : 'New folder';
+            if (!editMode) {
+                document.getElementById('folderForm').reset();
+                document.getElementById('inputStatus').value = '';
+                document.getElementById('previewFolderName').innerText = 'Untitled';
+            }
+            const modal = document.getElementById('modalNewFolder');
+            const card = document.getElementById('modalCard');
+            modal.classList.remove('hidden');
+            
+            requestAnimationFrame(() => {
+                modal.classList.remove('opacity-0');
+                card.classList.remove('scale-95', 'opacity-0');
+                card.classList.add('scale-100', 'opacity-100');
+            });
+        }
+
+        function closeNewFolderModal() {
+            const modal = document.getElementById('modalNewFolder');
+            const card = document.getElementById('modalCard');
+            modal.classList.add('opacity-0');
+            card.classList.remove('scale-100', 'opacity-100');
+            card.classList.add('scale-95', 'opacity-0');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+            }, 250);
+        }
+
+        function updateFolderPreview() {
+            const val = document.getElementById('inputName').value.trim();
+            document.getElementById('previewFolderName').innerText = val || 'Untitled';
+        }
+
+        async function saveFolder(e) {
+            e.preventDefault();
+            const name = document.getElementById('inputName').value.trim();
+            const status = document.getElementById('inputStatus').value;
+            const passport = document.getElementById('inputPassport').value.trim();
+            const labor = document.getElementById('inputLabor').value.trim();
+            const phone = document.getElementById('inputPhone').value.trim();
+
+            let targetFolder = null;
+            if (currentFolderId && document.getElementById('modalTitle').innerText === 'Edit folder') {
+                targetFolder = folders.find(f => f.id === currentFolderId);
+                if (targetFolder) {
+                    targetFolder.name = name;
+                    targetFolder.status = status;
+                    targetFolder.passport = passport;
+                    targetFolder.labor = labor;
+                    targetFolder.phone = phone;
+                }
+            } else {
+                targetFolder = {
+                    id: Date.now().toString(),
+                    name,
+                    status: status || '',
+                    passport,
+                    labor,
+                    phone,
+                    docs: { mainId: null, emergencyFront: null, emergencyBack: null, passport: null, coc: null, visa: null, contract: null, insurance: null }
+                };
+                folders.push(targetFolder);
+                currentFolderId = targetFolder.id;
+            }
+
+            await dbSave(targetFolder);
+            closeNewFolderModal();
+            if (currentFolderId) openFolderDetail(currentFolderId, true);
+        }
+
+        function openFolderDetail(id, transition = true) {
+            currentFolderId = id;
+            const folder = folders.find(f => f.id === id);
+            if (!folder) return;
+
+            const homeView = document.getElementById('view-home');
+            const detailView = document.getElementById('view-detail');
+
+            if (transition) {
+                homeView.classList.add('view-hidden');
+                setTimeout(() => {
+                    homeView.classList.add('hidden');
+                    detailView.classList.remove('hidden');
+                    requestAnimationFrame(() => {
+                        detailView.classList.remove('view-hidden');
+                    });
+                }, 120);
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+
+            const index = folders.findIndex(f => f.id === id) + 1;
+            document.getElementById('folderPagination').innerText = `${index}/${folders.length}`;
+            document.getElementById('detailName').innerText = folder.name || 'Untitled';
+
+            const completion = getFolderCompletion(folder);
+            const badgeEl = document.getElementById('detailBadge');
+            badgeEl.innerText = `${completion.completed}/6 complete`;
+            badgeEl.className = 'text-[11px] font-semibold px-2.5 py-0.5 rounded-full border bg-stone-100 dark:bg-stone-700 text-stone-600 dark:text-stone-300 border-stone-200/60 dark:border-stone-600/60';
+
+            const statusVal = folder.status || '';
+            const statusBadgeEl = document.getElementById('detailStatusBadge');
+            if (statusVal) {
+                statusBadgeEl.innerText = statusVal;
+                statusBadgeEl.className = `text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${getStatusBadgeStyle(statusVal)}`;
+                statusBadgeEl.classList.remove('hidden');
+            } else {
+                statusBadgeEl.classList.add('hidden');
+            }
+
+            document.getElementById('detailPassportText').innerText = folder.passport || '--';
+            document.getElementById('detailLaborText').innerText = folder.labor || '--';
+            document.getElementById('detailPhoneText').innerText = folder.phone || '--';
+
+            renderDocSlots(folder);
+        }
+
+        function renderDocSlots(folder) {
+            const container = document.getElementById('docSlotsList');
+            container.innerHTML = '';
+
+            DOC_FIELDS.forEach((doc, idx) => {
+                const card = document.createElement('div');
+                card.className = 'doc-card gpu-accelerated bg-white dark:bg-stone-800/80 rounded-3xl p-5 border border-stone-200/60 dark:border-stone-700/60 space-y-3 shadow-sm anim-folder-item';
+                card.style.setProperty('--stagger', idx);
+
+                if (doc.isTwoSided) {
+                    const frontData = folder.docs?.emergencyFront;
+                    const backData = folder.docs?.emergencyBack;
+                    const emCount = (frontData ? 1 : 0) + (backData ? 1 : 0);
+
+                    card.innerHTML = `
+                        <div class="flex items-center justify-between">
+                            <h3 class="font-serif-title text-xl text-brand-textDark dark:text-white">${doc.title}</h3>
+                            <span class="text-[10px] font-medium text-stone-400 bg-stone-100 dark:bg-stone-700/60 px-2.5 py-0.5 rounded-full border border-stone-200/50 dark:border-stone-600/50">${emCount} of 2 sides</span>
+                        </div>
+                        <div class="space-y-3">
+                            <div class="space-y-1.5">
+                                <div class="flex justify-between text-xs text-stone-500 font-medium"><span>Front side</span><span class="text-stone-400 text-[11px]">${frontData ? 'Attached' : 'Missing'}</span></div>
+                                <div id="box-emergencyFront" class="doc-box bg-brand-box dark:bg-stone-900/80 rounded-2xl h-44 flex flex-col items-center justify-center text-xs text-stone-400 overflow-hidden relative border border-dashed border-stone-300 dark:border-stone-700">
+                                    <span id="label-emergencyFront" class="flex flex-col items-center space-y-1"><i data-lucide="file-up" class="w-5 h-5 text-stone-400"></i><span>Drop PDF/Image or upload</span></span>
+                                    <canvas id="canvas-emergencyFront" class="max-h-full max-w-full object-contain hidden"></canvas>
+                                    <button onclick="removeDoc('emergencyFront')" id="btnRemove-emergencyFront" class="btn-interactive absolute top-2 right-2 bg-stone-900/80 hover:bg-stone-900 text-white rounded-full p-1.5 hidden z-10"><i data-lucide="x" class="w-3.5 h-3.5"></i></button>
+                                </div>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <button onclick="triggerUpload('emergencyFront', true)" class="btn-interactive flex items-center justify-center space-x-1.5 bg-white dark:bg-stone-700 border border-stone-200 dark:border-stone-600 text-stone-700 dark:text-stone-200 py-2 rounded-xl text-xs font-medium"><i data-lucide="camera" class="w-3.5 h-3.5"></i><span>Photo</span></button>
+                                    <button onclick="triggerUpload('emergencyFront', false)" class="btn-interactive flex items-center justify-center space-x-1.5 bg-brand-accent text-white py-2 rounded-xl text-xs font-medium shadow-sm"><i data-lucide="file-text" class="w-3.5 h-3.5"></i><span>File / PDF</span></button>
+                                </div>
+                            </div>
+
+                            <div class="space-y-1.5 pt-3 border-t border-stone-100 dark:border-stone-700/60">
+                                <div class="flex justify-between text-xs text-stone-500 font-medium"><span>Back side</span><span class="text-stone-400 text-[11px]">${backData ? 'Attached' : 'Missing'}</span></div>
+                                <div id="box-emergencyBack" class="doc-box bg-brand-box dark:bg-stone-900/80 rounded-2xl h-44 flex flex-col items-center justify-center text-xs text-stone-400 overflow-hidden relative border border-dashed border-stone-300 dark:border-stone-700">
+                                    <span id="label-emergencyBack" class="flex flex-col items-center space-y-1"><i data-lucide="file-up" class="w-5 h-5 text-stone-400"></i><span>Drop PDF/Image or upload</span></span>
+                                    <canvas id="canvas-emergencyBack" class="max-h-full max-w-full object-contain hidden"></canvas>
+                                    <button onclick="removeDoc('emergencyBack')" id="btnRemove-emergencyBack" class="btn-interactive absolute top-2 right-2 bg-stone-900/80 hover:bg-stone-900 text-white rounded-full p-1.5 hidden z-10"><i data-lucide="x" class="w-3.5 h-3.5"></i></button>
+                                </div>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <button onclick="triggerUpload('emergencyBack', true)" class="btn-interactive flex items-center justify-center space-x-1.5 bg-white dark:bg-stone-700 border border-stone-200 dark:border-stone-600 text-stone-700 dark:text-stone-200 py-2 rounded-xl text-xs font-medium"><i data-lucide="camera" class="w-3.5 h-3.5"></i><span>Photo</span></button>
+                                    <button onclick="triggerUpload('emergencyBack', false)" class="btn-interactive flex items-center justify-center space-x-1.5 bg-brand-accent text-white py-2 rounded-xl text-xs font-medium shadow-sm"><i data-lucide="file-text" class="w-3.5 h-3.5"></i><span>File / PDF</span></button>
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-2 border-t border-stone-100 dark:border-stone-700/60">
+                                <button onclick="downloadSinglePDF('emergencyFront', 'Emergency_Front')" class="btn-interactive flex items-center justify-center space-x-1 bg-brand-box dark:bg-stone-700 text-stone-700 dark:text-stone-200 py-2 rounded-xl text-[11px] font-medium border border-stone-200/50 dark:border-stone-600/50"><i data-lucide="file-down" class="w-3.5 h-3.5"></i><span>Front PDF</span></button>
+                                <button onclick="downloadSinglePDF('emergencyBack', 'Emergency_Back')" class="btn-interactive flex items-center justify-center space-x-1 bg-brand-box dark:bg-stone-700 text-stone-700 dark:text-stone-200 py-2 rounded-xl text-[11px] font-medium border border-stone-200/50 dark:border-stone-600/50"><i data-lucide="file-down" class="w-3.5 h-3.5"></i><span>Back PDF</span></button>
+                                <button onclick="downloadCombinedEmergencyPDF()" class="btn-interactive flex items-center justify-center space-x-1 bg-stone-800 text-white dark:bg-stone-200 dark:text-stone-900 py-2 rounded-xl text-[11px] font-medium shadow-sm"><i data-lucide="layers" class="w-3.5 h-3.5"></i><span>Both Sides</span></button>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    const isAttached = !!folder.docs?.[doc.key];
+                    card.innerHTML = `
+                        <div class="flex items-center justify-between">
+                            <h3 class="font-serif-title text-xl text-brand-textDark dark:text-white">${doc.title}</h3>
+                            <span class="text-[10px] font-medium ${isAttached ? 'text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 border-emerald-200 dark:border-emerald-800/60' : 'text-stone-400 bg-stone-100 dark:bg-stone-700/60 border-stone-200/50 dark:border-stone-600/50'} px-2.5 py-0.5 rounded-full border">${isAttached ? 'Attached' : 'Missing'}</span>
+                        </div>
+                        <div id="box-${doc.key}" class="doc-box bg-brand-box dark:bg-stone-900/80 rounded-2xl h-44 flex flex-col items-center justify-center text-xs text-stone-400 overflow-hidden relative border border-dashed border-stone-300 dark:border-stone-700">
+                            <span id="label-${doc.key}" class="flex flex-col items-center space-y-1"><i data-lucide="file-up" class="w-5 h-5 text-stone-400"></i><span>Drop PDF/Image or upload</span></span>
+                            <canvas id="canvas-${doc.key}" class="max-h-full max-w-full object-contain hidden"></canvas>
+                            <button onclick="removeDoc('${doc.key}')" id="btnRemove-${doc.key}" class="btn-interactive absolute top-2 right-2 bg-stone-900/80 hover:bg-stone-900 text-white rounded-full p-1.5 hidden z-10"><i data-lucide="x" class="w-3.5 h-3.5"></i></button>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <button onclick="triggerUpload('${doc.key}', true)" class="btn-interactive flex items-center justify-center space-x-1.5 bg-white dark:bg-stone-700 border border-stone-200 dark:border-stone-600 text-stone-700 dark:text-stone-200 py-2 rounded-xl text-xs font-medium"><i data-lucide="camera" class="w-3.5 h-3.5"></i><span>Photo</span></button>
+                            <button onclick="triggerUpload('${doc.key}', false)" class="btn-interactive flex items-center justify-center space-x-1.5 bg-brand-accent text-white py-2 rounded-xl text-xs font-medium shadow-sm"><i data-lucide="file-text" class="w-3.5 h-3.5"></i><span>File / PDF</span></button>
+                        </div>
+                        <button onclick="downloadSinglePDF('${doc.key}', '${doc.title}')" class="btn-interactive w-full flex items-center justify-center space-x-1.5 bg-brand-box dark:bg-stone-700 text-stone-700 dark:text-stone-200 py-2.5 rounded-xl text-xs font-medium border border-stone-200/50 dark:border-stone-600/50"><i data-lucide="file-down" class="w-3.5 h-3.5"></i><span>Download ${doc.title} PDF</span></button>
+                    `;
+                }
+
+                container.appendChild(card);
+            });
+
+            lucide.createIcons();
+
+            const docKeys = ['mainId', 'emergencyFront', 'emergencyBack', 'passport', 'visa', 'contract', 'insurance', 'coc'];
+            docKeys.forEach(k => {
+                updateDocSlot(k, folder.docs?.[k], folder.name);
+                bindDragAndDropUpload(k);
+            });
+        }
+
+        function showHomeView() {
+            const homeView = document.getElementById('view-home');
+            const detailView = document.getElementById('view-detail');
+
+            detailView.classList.add('view-hidden');
+            setTimeout(() => {
+                detailView.classList.add('hidden');
+                homeView.classList.remove('hidden');
+                requestAnimationFrame(() => {
+                    homeView.classList.remove('view-hidden');
+                });
+                renderFolders();
+            }, 120);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function editFolderDetails() {
+            const folder = folders.find(f => f.id === currentFolderId);
+            if (!folder) return;
+            document.getElementById('inputName').value = folder.name || '';
+            document.getElementById('inputStatus').value = folder.status || '';
+            document.getElementById('inputPassport').value = folder.passport || '';
+            document.getElementById('inputLabor').value = folder.labor || '';
+            document.getElementById('inputPhone').value = folder.phone || '';
+            updateFolderPreview();
+            openNewFolderModal(true);
+        }
+
+        async function deleteCurrentFolder() {
+            if (confirm('Are you sure you want to delete this folder?')) {
+                folders = folders.filter(f => f.id !== currentFolderId);
+                await dbDelete(currentFolderId);
+                showHomeView();
+            }
+        }
+
+        function triggerUpload(docKey, isCamera = false) {
+            activeUploadDocKey = docKey;
+            const fileInput = document.getElementById('genericFileInput');
+            if (isCamera) fileInput.setAttribute('capture', 'environment');
+            else fileInput.removeAttribute('capture');
+            fileInput.click();
+        }
+
+        function convertImageToPDF(dataUrl, title, callback) {
+            const img = new Image();
+            img.src = dataUrl;
+            img.onload = function() {
+                const { jsPDF } = window.jspdf;
+                const imgW = img.naturalWidth || img.width;
+                const imgH = img.naturalHeight || img.height;
+                const pdf = new jsPDF({
+                    orientation: imgW > imgH ? 'l' : 'p',
+                    unit: 'mm',
+                    format: 'a4'
+                });
+                const pW = pdf.internal.pageSize.getWidth();
+                const pH = pdf.internal.pageSize.getHeight();
+                let rW = pW - 20;
+                let rH = (imgH * rW) / imgW;
+                if (rH > pH - 20) {
+                    rH = pH - 20;
+                    rW = (imgW * rH) / imgH;
+                }
+                const x = (pW - rW) / 2;
+                const y = (pH - rH) / 2;
+                pdf.addImage(dataUrl, dataUrl.startsWith('data:image/png') ? 'PNG' : 'JPEG', x, y, rW, rH);
+                callback(pdf.output('datauristring'));
+            };
+        }
+
+        function processFileSave(file, docKey) {
+            if (!file || !currentFolderId) return;
+            const reader = new FileReader();
+            reader.onload = async function(evt) {
+                const dataUrl = evt.target.result;
+                const folder = folders.find(f => f.id === currentFolderId);
+                if (folder) {
+                    if (!folder.docs) folder.docs = {};
+
+                    if (!dataUrl.startsWith('data:application/pdf')) {
+                        convertImageToPDF(dataUrl, docKey, async (pdfDataUrl) => {
+                            folder.docs[docKey] = pdfDataUrl;
+                            await dbSave(folder);
+                            openFolderDetail(currentFolderId, false);
+                            showToast('File attached as PDF');
+                        });
+                    } else {
+                        folder.docs[docKey] = dataUrl;
+                        await dbSave(folder);
+                        openFolderDetail(currentFolderId, false);
+                        showToast('PDF Attached');
+                    }
+                }
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function handleFileUpload(e) {
+            const file = e.target.files[0];
+            if (file && activeUploadDocKey) {
+                processFileSave(file, activeUploadDocKey);
+            }
+            e.target.value = '';
+        }
+
+        function bindDragAndDropUpload(key) {
+            const box = document.getElementById(`box-${key}`);
+            if (!box) return;
+
+            ['dragenter', 'dragover'].forEach(eventName => {
+                box.addEventListener(eventName, (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    box.classList.add('drag-over');
+                }, false);
+            });
+
+            ['dragleave', 'drop'].forEach(eventName => {
+                box.addEventListener(eventName, (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    box.classList.remove('drag-over');
+                }, false);
+            });
+
+            box.addEventListener('drop', (e) => {
+                const dt = e.dataTransfer;
+                const files = dt.files;
+                if (files && files.length > 0) {
+                    processFileSave(files[0], key);
+                }
+            }, false);
+        }
+
+        async function renderPDFThumbnail(dataUrl, canvasEl) {
+            try {
+                const pdfData = atob(dataUrl.split(',')[1]);
+                const loadingTask = pdfjsLib.getDocument({ data: pdfData });
+                const pdf = await loadingTask.promise;
+                const page = await pdf.getPage(1);
+                const viewport = page.getViewport({ scale: 0.45 });
+                const context = canvasEl.getContext('2d');
+                canvasEl.width = viewport.width;
+                canvasEl.height = viewport.height;
+                await page.render({ canvasContext: context, viewport }).promise;
+                canvasEl.classList.remove('hidden');
+            } catch (err) {
+                console.error('Thumbnail render error:', err);
+            }
+        }
+
+        // --- Cross-App Native Drag Out Engine (WhatsApp, LMIS, Desktop) ---
+        function updateDocSlot(key, dataUrl, folderName) {
+            const label = document.getElementById(`label-${key}`);
+            const canvas = document.getElementById(`canvas-${key}`);
+            const box = document.getElementById(`box-${key}`);
+            const btnRemove = document.getElementById(`btnRemove-${key}`);
+
+            if (!box || !label) return;
+
+            if (dataUrl) {
+                label.classList.add('hidden');
+                if (btnRemove) btnRemove.classList.remove('hidden');
+                if (canvas) renderPDFThumbnail(dataUrl, canvas);
+
+                box.setAttribute('draggable', 'true');
+                box.style.cursor = 'grab';
+
+                box.ondragstart = (e) => {
+                    const cleanName = (folderName || 'Document').replace(/[^a-zA-Z0-0_-]/g, '_');
+                    const fileName = `${cleanName}_${key}.pdf`;
+
+                    const blob = dataUrlToBlob(dataUrl);
+                    const blobUrl = URL.createObjectURL(blob);
+                    const fileObj = new File([blob], fileName, { type: 'application/pdf' });
+
+                    // 1. Chrome/Edge direct desktop drag out format
+                    e.dataTransfer.setData("DownloadURL", `application/pdf:${fileName}:${blobUrl}`);
+
+                    // 2. Add native File object for direct drop into web apps (WhatsApp, LMIS, dropzones)
+                    if (e.dataTransfer.items && e.dataTransfer.items.add) {
+                        try {
+                            e.dataTransfer.items.add(fileObj);
+                        } catch (err) { console.log('Items add fallback:', err); }
+                    }
+
+                    // 3. URI and Text Fallbacks
+                    e.dataTransfer.setData("text/uri-list", blobUrl);
+                    e.dataTransfer.setData("text/plain", blobUrl);
+
+                    // Clean up blob URL after drag cycle
+                    setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
+                };
+            } else {
+                label.classList.remove('hidden');
+                if (canvas) canvas.classList.add('hidden');
+                if (btnRemove) btnRemove.classList.add('hidden');
+                box.removeAttribute('draggable');
+                box.style.cursor = 'default';
+            }
+        }
+
+        async function removeDoc(key) {
+            const folder = folders.find(f => f.id === currentFolderId);
+            if (folder && folder.docs) {
+                folder.docs[key] = null;
+                await dbSave(folder);
+                openFolderDetail(currentFolderId, false);
+            }
+        }
+
+        function downloadSinglePDF(docKey, title) {
+            const folder = folders.find(f => f.id === currentFolderId);
+            const pdfData = folder?.docs?.[docKey];
+            if (!pdfData) {
+                alert(`No file attached for ${title}`);
+                return;
+            }
+            const link = document.createElement('a');
+            link.href = pdfData;
+            link.download = `${folder.name}_${title}.pdf`;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+        }
+
+        function loadImage(src) {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                img.onload = () => resolve(img);
+                img.onerror = (err) => reject(err);
+                img.src = src;
+            });
+        }
+
+        async function getImageDataUrlFromDoc(dataUrl) {
+            if (!dataUrl) return null;
+            if (dataUrl.startsWith('data:image/')) {
+                return dataUrl;
+            }
+            if (dataUrl.startsWith('data:application/pdf')) {
+                const pdfData = atob(dataUrl.split(',')[1]);
+                const loadingTask = pdfjsLib.getDocument({ data: pdfData });
+                const pdf = await loadingTask.promise;
+                const page = await pdf.getPage(1);
+                const viewport = page.getViewport({ scale: 1.8 });
+                const canvas = document.createElement('canvas');
+                canvas.width = viewport.width;
+                canvas.height = viewport.height;
+                const ctx = canvas.getContext('2d');
+                await page.render({ canvasContext: ctx, viewport }).promise;
+                return canvas.toDataURL('image/jpeg', 0.92);
+            }
+            return dataUrl;
+        }
+
+        async function downloadCombinedEmergencyPDF() {
+            const folder = folders.find(f => f.id === currentFolderId);
+            if (!folder) return;
+            const front = folder.docs?.emergencyFront;
+            const back = folder.docs?.emergencyBack;
+
+            if (!front && !back) {
+                alert('No Emergency ID files attached for Front or Back.');
+                return;
+            }
+
+            try {
+                showToast('Generating Emergency ID PDF...');
+                const { jsPDF } = window.jspdf;
+                const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+
+                const appendPage = async (dataUrl, isFirstPage) => {
+                    const imgData = await getImageDataUrlFromDoc(dataUrl);
+                    const img = await loadImage(imgData);
+                    
+                    if (!isFirstPage) pdf.addPage();
+                    
+                    const pW = pdf.internal.pageSize.getWidth();
+                    const pH = pdf.internal.pageSize.getHeight();
+                    const imgW = img.naturalWidth || img.width || 100;
+                    const imgH = img.naturalHeight || img.height || 100;
+                    
+                    let rW = pW - 20;
+                    let rH = (imgH * rW) / imgW;
+                    if (rH > pH - 20) {
+                        rH = pH - 20;
+                        rW = (imgW * rH) / imgH;
+                    }
+                    const x = (pW - rW) / 2;
+                    const y = (pH - rH) / 2;
+                    pdf.addImage(imgData, 'JPEG', x, y, rW, rH);
+                };
+
+                let isFirst = true;
+                if (front) {
+                    await appendPage(front, isFirst);
+                    isFirst = false;
+                }
+                if (back) {
+                    await appendPage(back, isFirst);
+                }
+
+                pdf.save(`${folder.name || 'Folder'}_Emergency_ID_Combined.pdf`);
+                showToast('Downloaded Emergency ID Combined!');
+            } catch (err) {
+                console.error('Error generating combined PDF:', err);
+                alert('Failed to build combined PDF: ' + (err.message || err));
+            }
+        }
+
+        function downloadAllPDFs() {
+            const folder = folders.find(f => f.id === currentFolderId);
+            if (!folder) return;
+            const docs = ['mainId', 'emergencyFront', 'emergencyBack', 'passport', 'visa', 'contract', 'insurance', 'coc'];
+            let delay = 0;
+            docs.forEach(d => {
+                if (folder.docs?.[d]) {
+                    setTimeout(() => downloadSinglePDF(d, d.toUpperCase()), delay);
+                    delay += 250;
+                }
+            });
+        }
+
+        function exportAllData() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(folders));
+            const dlAnchor = document.createElement('a');
+            dlAnchor.setAttribute("href", dataStr);
+            dlAnchor.setAttribute("download", `linored_backup_${Date.now()}.json`);
+            document.body.appendChild(dlAnchor);
+            dlAnchor.click();
+            dlAnchor.remove();
+        }
+
+        function importDataTrigger() { document.getElementById('importFileInput').click(); }
+
+        function importData(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = async function(evt) {
+                try {
+                    const imported = JSON.parse(evt.target.result);
+                    if (Array.isArray(imported)) {
+                        folders = imported;
+                        await dbClearAndImport(folders);
+                        renderFolders();
+                        showToast('Data restored successfully!');
+                    }
+                } catch(err) {
+                    alert('Invalid JSON backup file.');
+                }
+            };
+            reader.readAsText(file);
+        }
+    </script>
+</body>
+</html>
